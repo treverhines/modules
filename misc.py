@@ -82,12 +82,13 @@ def funtime(fun):
 
 def _baseN_to_base10(value_baseN,base_char):
   N = len(base_char)
-  value_baseN = str(value_baseN)
+  value_baseN = str(value_baseN)  
   base_char = base_char[:N]
-  assert all(i in base_char for i in value_baseN)
+  assert all(i in base_char for i in value_baseN), (
+    'a character in the input does not exist in the base characters')
+
   value_base10 = sum(base_char.find(i)*N**(n) for (n,i) in enumerate(value_baseN[::-1]))
   return value_base10  
-
 
 def _base10_to_baseN(value_base10,base_char):
   N = len(base_char)
@@ -99,14 +100,13 @@ def _base10_to_baseN(value_base10,base_char):
     value_baseN = base_char[0]
   return value_baseN
 
-
-def baseN_to_baseM(value_baseN,N,M):
+def baseNtoM(value,N,M):
   '''
   converts an integer in base N to a value in base M
 
   PARAMETERS
   ----------
-    value_baseN: (integer or string) the integer value in base N whose 
+    value: (integer or string) the integer value in base N whose 
       characters must be a subset of the input base characters. If all the 
       characters in this value are 0-9 then an integer can be given, otherwise, 
       it must be a string.
@@ -144,8 +144,13 @@ def baseN_to_baseM(value_baseN,N,M):
     baseM_char = DEFAULT_CHARACTERS[:M]
   else:  
     baseM_char = M
-      
-  value_base10 = _baseN_to_base10(value_baseN,baseN_char)
+
+  assert len(baseN_char) > 1, (
+    'There must be more than 1 base character')
+  assert len(baseM_char) > 1, (
+    'There must be more than 1 base character')
+
+  value_base10 = _baseN_to_base10(value,baseN_char)
   value_baseM = _base10_to_baseN(value_base10,baseM_char)
   return value_baseM
   
@@ -157,7 +162,7 @@ def timestamp(factor=1.0):
   that identifies the computer this function was called from
   '''
   value_base10 = int(timemod.time()*factor)
-  return baseN_to_baseM(value_base10,10,36)
+  return baseNtoM(value_base10,10,36)
 
 
 def list_flatten(lst):
