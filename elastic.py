@@ -58,8 +58,8 @@ def two_layer(y,D,slip,mu1,mu2,H,terms=5):
 def three_layer(y,p,slip,mu3,mu2,mu1,h3,h2,terms=5):
   '''                                                                                                               
   surface displacements in a layered earth from Chinnery and Jovanovich 1972.  
-  This is taken from part iii and simplify z-> 0, and mu4 -> 0, So that the 
-  displacements are at a free surface.
+  This is taken from part iii and simplified with z-> 0, and mu4 -> 0 so that 
+  the displacements are at a free surface.
 
                          y=0,z=0                 
   -------------------------------------------------------

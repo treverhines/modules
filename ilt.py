@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+from __future__ import division
 import mpmath 
 import numpy as np
 from scipy.special import factorial
@@ -23,17 +24,39 @@ class ILT(object):
   requires arbitrarily high precision arithmetic through the mpmath package.  
 
   Calling an instance with t will evaluate the Taylor series of f(t) about t=0.
-                                                          
+
+  Note: Having gmpy installed on your system will significantly improve the 
+    performance of this function.  I was not able to install gmpy through 
+    pip or conda and so I built it manually following the instructions here:
+
+    https://gmpy2.readthedocs.org/en/latest/intro.html#installing-gmpy2-on-unix-linux  
+
+  Usage
+  -----
+  Compute the inverse Laplace transform of 1/(s**2+1) which is sin(t):
+
+    In [1]: import ilt
+
+    In [2]: fhat = lambda s:1/(s**2+1) 
+
+    In [3]: f = ilt.ILT(fhat,20)
+
+    In [4]: t = np.linspace(np.pi,np.pi)
+
+    In [5]: np.linalg.norm(f(t)-np.sin(t))
+    Out[5]: 3.7400241737311949e-09
+
   '''
   def __init__(self,fhat,N,f_args=None,f_kwargs=None,s_min=1e6):
     '''
     PARAMETERS:                                                    
 
-      fhat: function which takes arguments: (s, *f_args, **f_kwargs)
+      fhat: function which takes arguments: (s, *f_args, **f_kwargs) and returns
+        an array type object
 
       N: number of terms in the Taylor series expansion of f. The memory 
-         requirements for this function increase exponentially with N, so 
-         be careful.
+        requirements for this function increase exponentially with N, so 
+        be careful.
 
       fhat_args: (default None) arguments to fhat
 
@@ -43,7 +66,10 @@ class ILT(object):
         approximate infinity used to compute f^(n)(0). the next lower derivative
         uses an approximation to infinity which is s_min**2.  Hence, the largest 
         approximation to infinity is s_min**(2**(N-1)).  The machine precision 
-        adjusts accordingly to accurately represent such a large number.
+        adjusts accordingly to accurately represent such a large number.  You
+        should run this function varying s by orders of magnitude to make sure
+        that your solution is converging for large s.  When the timescales of
+        f(t) are >> 1 then s needs to be increased significantly.
 
     '''
     assert N >= 1, (
@@ -75,6 +101,19 @@ class ILT(object):
     self.N = N
 
   def __call__(self,t,diff=0):
+    '''
+    evaluates the inverse Laplace transform of fhat at t
+
+    Parameters
+    ----------
+      t: scalar or array of times where f is evaluated
+      diff: (default 0) returns t evaluated at this order derivative f
+ 
+    Returns
+    -------
+      array object whos dimensions are the shape of the output from fhat(s)
+      plus an additional time dimension.
+    '''    
     assert diff < self.N, (
       'Derivative order must be less than than the Taylor series order')
     
