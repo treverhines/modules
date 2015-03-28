@@ -1,11 +1,20 @@
 #!/usr/bin/env python
 import mpmath 
 import numpy as np
+from scipy.special import factorial
+
+# Poke methods into the mpmath.mpf class so that numpy functions 
+# know how to handle mpf instances as arguments. functions will be
+# added as needed
+mpmath.mpf.exp = mpmath.exp
+mpmath.mpf.sin = mpmath.sin
+mpmath.mpf.cos = mpmath.cos
+mpmath.mpf.tan = mpmath.tan
 
 class ILT(object):
   '''                                                                                                            
   Evaluates the inverse laplace transform of a function, fhat(s), through a 
-  Taylor series expansion.  
+  Taylor series expansion.
 
   Initiating the class with fhat(s) will compute f^(n)(0) for n up to the 
   specified N, where f^(n)(t) is the nth derivative of the inverse Laplace 
@@ -16,7 +25,7 @@ class ILT(object):
   Calling an instance with t will evaluate the Taylor series of f(t) about t=0.
                                                           
   '''
-  def __init__(self,fhat,N,f_args=None,f_kwargs=None,log_s_min=4):
+  def __init__(self,fhat,N,f_args=None,f_kwargs=None,s_min=1e6):
     '''
     PARAMETERS:                                                    
 
@@ -30,37 +39,45 @@ class ILT(object):
 
       fhat_kwargs: (default None) key word arguments to fhat
 
-      log_s_min: (default 4) the base 10 log of the smallest approximation to 
-        inifinity. This is the approximate infinity used to compute f^(n)(0).
-        the next lower derivative uses an approximation to infinity which is 
-        a factor of two larger in log_10 space.  Hence, the largest 
-        approximation to infinity is 10**(log_s_min*2**(N-1)).  The machine 
-        precision adjusts accordingly to accurately represent such a large 
-        number.
+      s_min: (default 1e6) the smallest approximation to inifinity. This is the 
+        approximate infinity used to compute f^(n)(0). the next lower derivative
+        uses an approximation to infinity which is s_min**2.  Hence, the largest 
+        approximation to infinity is s_min**(2**(N-1)).  The machine precision 
+        adjusts accordingly to accurately represent such a large number.
 
     '''
+    assert N >= 1, (
+      'at least one term is needed in the Taylor series expansion') 
+
     if f_args is None:
       f_args = ()
     if f_kwargs is None:
       f_kwargs = {}
 
-    workdps = 15 + int(log_s_min*2**(N-1))
-    derivatives = []
-    self.coefficients = []
+    workdps = 15 + int(np.log10(s_min)*2**(N-1))
+    c = []
     with mpmath.workdps(workdps):
-      s = mpmath.mpf(10**(log_s_min*2**(N-1)))
+      s_min = mpmath.mpf(s_min)
       for n in range(N):
+        s = s_min**(2.0**((N-1)-n))
         a = s**(n+1)*fhat(s,*f_args,**f_kwargs)
-        b = sum(s**(m+1)*derivatives[n-m-1] for m in range(n))
-        derivatives += [a - b]
-        c = derivatives[n]/mpmath.factorial(n)
-        # convert c to a numpy array with double precision floats                                                  
-        c_shape = np.shape(c)
-        c = np.reshape([float(i) for i in c.flatten()],c_shape)
-        self.coefficients += [c]
-        s = mpmath.sqrt(s)
+        b = sum(s**(m+1)*c[n-m-1] for m in range(n))
+        c += [a - b]
 
-  def __call__(self,t):
+    # convert c to numpy float arrays
+    self.c = []
+    for c_i in c:
+      c_i = np.asarray(c_i)
+      c_i_flat = c_i.flatten()
+      c_i_flat = [float(i) for i in c_i_flat]
+      self.c += [np.reshape(c_i_flat,np.shape(c_i))]
 
-    t = np.asarray(t)
-    return sum(C[...,None]*t**n for n,C in enumerate(self.coefficients))
+    self.N = N
+
+  def __call__(self,t,diff=0):
+    assert diff < self.N, (
+      'Derivative order must be less than than the Taylor series order')
+    
+    t = np.asarray(t)    
+    term = lambda n,val:val[...,None]*t**n/factorial(n)
+    return sum(term(n,val) for n,val in enumerate(self.c[diff:]))
