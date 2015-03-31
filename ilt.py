@@ -35,16 +35,16 @@ class ILT(object):
   -----
   Compute the inverse Laplace transform of 1/(s**2+1) which is sin(t):
 
-    In [1]: import ilt
+    In [1]: from ilt import ILT
 
-    In [2]: fhat = lambda s:1/(s**2+1) 
+    In [2]: fhat = lambda s:1/(s**2 + 1)
 
-    In [3]: f = ilt.ILT(fhat,20)
+    In [3]: f = ILT(fhat,20)
 
-    In [4]: t = np.linspace(np.pi,np.pi)
+    In [4]: t = np.linspace(-np.pi,np.pi,100)
 
-    In [5]: np.linalg.norm(f(t)-np.sin(t))
-    Out[5]: 3.7400241737311949e-09
+    In [5]: np.linalg.norm(f(t) - np.sin(t))
+    Out[5]: 9.8183876085200952e-10
 
   '''
   def __init__(self,fhat,N,f_args=None,f_kwargs=None,s_min=1e6):
@@ -87,7 +87,7 @@ class ILT(object):
       for n in range(N):
         s = s_min**(2.0**((N-1)-n))
         a = s**(n+1)*fhat(s,*f_args,**f_kwargs)
-        b = sum(s**(m+1)*c[n-m-1] for m in range(n))
+        b = sum(s**(m)*c[n-m] for m in range(1,n+1))
         c += [a - b]
 
     # convert c to numpy float arrays

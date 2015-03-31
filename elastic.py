@@ -22,9 +22,9 @@ def two_layer(y,D,slip,mu1,mu2,H,terms=5):
 
     H: Thickness of the top layer
     
-    terms: number of terms used to approximate the infinite series in the 
-      solution. terms=1 produces the solution for a homogeneous elastic
-      halfspace and higher.  
+    terms: number of terms used to approximate the infinite series in
+      the solution. terms=1 produces the solution for a homogeneous
+      elastic halfspace and higher.
 
 
                          y=0,z=0                 
@@ -36,9 +36,7 @@ def two_layer(y,D,slip,mu1,mu2,H,terms=5):
                                                 |
   -------------------------------------------------------
 
-                                  mu2           
-
-
+                                  mu2
 
   '''
   assert terms > 1
@@ -54,12 +52,12 @@ def two_layer(y,D,slip,mu1,mu2,H,terms=5):
   u = u*slip/(np.pi)
   return u 
 
-##-------------------------------------------------------------------------------------------                       
+
 def three_layer(y,p,slip,mu3,mu2,mu1,h3,h2,terms=5):
-  '''                                                                                                               
-  surface displacements in a layered earth from Chinnery and Jovanovich 1972.  
-  This is taken from part iii and simplified with z-> 0, and mu4 -> 0 so that 
-  the displacements are at a free surface.
+  '''
+  surface displacements in a layered earth from Chinnery and Jovanovich
+  1972.  This is taken from part iii and simplified with z-> 0, and
+  mu4 -> 0 so that the displacements are at a free surface.
 
                          y=0,z=0                 
   -------------------------------------------------------
@@ -76,9 +74,10 @@ def three_layer(y,p,slip,mu3,mu2,mu1,h3,h2,terms=5):
                                   
                                   mu1
                                                                                                                   
-  Parameters
-  ----------
-    y: lateral distance from the dislocation   
+  Parameters 
+  ---------- 
+    
+    y: lateral distance from the dislocation
 
     p: bottom of the screw dislocation (down is positive)  
 
@@ -94,9 +93,9 @@ def three_layer(y,p,slip,mu3,mu2,mu1,h3,h2,terms=5):
 
     h2: Thickness of the middle layer
 
-    terms: number of terms used to approximate the infinite series in the 
-      solution. terms=1 produces the solution for a homogeneous elastic
-      halfspace and higher.  
+    terms: number of terms used to approximate the infinite series in
+      the solution. terms=1 produces the solution for a homogeneous
+      elastic halfspace and higher.
 
   '''
   assert terms > 1
