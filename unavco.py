@@ -844,11 +844,11 @@ class StationDB(dict):
       artists: additional artists to add to the map view plot
     '''
     if ts_formats is None:
-      ts_formats_all = ['b','k','r','m','y','r']
+      ts_formats_all = ['g','k','r','m','y','b']
       ts_formats = ts_formats_all[:len(disp_types)]
 
     if quiver_colors is None:
-      quiver_colors_all = ['b','k','r','m','y','r']
+      quiver_colors_all = ['g','k','r','m','y','b']
       quiver_colors = quiver_colors_all[:len(disp_types)]
 
     assert len(ts_formats) == len(quiver_colors)
