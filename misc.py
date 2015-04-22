@@ -45,6 +45,7 @@ class Timer:
   def tic(self,ID='process'):
     self.time_dict[ID] = timemod.time()
     self.last = ID
+    logger.info('timing %s' % ID)
 
   def toc(self,ID=None):
     if ID is None:
@@ -63,7 +64,9 @@ class Timer:
       unit = 'hr'
       conversion = 1.0/3600.0
     disp_runtime = '%.4g %s' % (runtime*conversion,unit)
+    logger.info('elapsed time for %s: %s' % (ID,disp_runtime))
     return 'elapsed time for %s: %s' % (ID,disp_runtime)
+
 
 def funtime(fun):
   '''
@@ -71,11 +74,10 @@ def funtime(fun):
   '''
   @wraps(fun)
   def subfun(*args,**kwargs):
-    logger.info('evaluating %s' % fun.__name__)
     t = Timer()
     t.tic(fun.__name__)
     out = fun(*args,**kwargs)
-    logger.info(t.toc(fun.__name__))
+    t.toc(fun.__name__)
     return out
   return subfun
 
@@ -90,6 +92,7 @@ def _baseN_to_base10(value_baseN,base_char):
   value_base10 = sum(base_char.find(i)*N**(n) for (n,i) in enumerate(value_baseN[::-1]))
   return value_base10  
 
+
 def _base10_to_baseN(value_base10,base_char):
   N = len(base_char)
   value_baseN = ""
@@ -99,6 +102,7 @@ def _base10_to_baseN(value_base10,base_char):
   if len(value_baseN) == 0:
     value_baseN = base_char[0]
   return value_baseN
+
 
 def baseNtoM(value,N,M):
   '''
@@ -165,7 +169,24 @@ def timestamp(factor=1.0):
   return baseNtoM(value_base10,10,36)
 
 
+def listify(a):
+  '''
+  recursively convert an iterable into a list
+  '''
+  out = []
+  for i in a:
+    if hasattr(i,'__iter__'):
+      out += [listify(i)]
+    else:
+      out += [i]
+
+  return out
+
+
 def list_flatten(lst):
+  '''
+  recursively flatten an iterable into a 1D list
+  '''
   lst = list(lst)
   out = []
   for sub in lst:
