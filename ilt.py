@@ -13,7 +13,7 @@ mpmath.mpf.cos = mpmath.cos
 mpmath.mpf.tan = mpmath.tan
 
 class ILT(object):
-  '''                                                                                                            
+  '''                                  
   Evaluates the inverse laplace transform of a function, fhat(s), through a 
   Taylor series expansion.
 

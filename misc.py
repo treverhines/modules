@@ -228,6 +228,55 @@ def rotation3D(argZ,argY,argX):
   return R1.dot(R2.dot(R3))
 
 
+def rotation_2d(argz):
+  return np.array([[  np.cos(argZ), -np.sin(argZ)],
+                   [  np.sin(argZ),  np.cos(argZ)]])
+
+
+def rotation_3d(argz,argy,argx):
+  return rotation3D(argz,argy,argx)
+
+
+def change_domain_basis(f,trans,argz,argy,argx):
+  '''                    
+  Takes a function with domain in R3 and input points are defined with     
+  respect to the to the coordinate basis X* and returns the same     
+  function with input points defined with respect to the coordinate     
+  basis X.  The aditional arguments specify how to change from basis                          
+  X to basis X*                                     
+     
+  Parameters                                  
+  ----------        
+
+    f: function which takes a N*3 array of points with respect to  X* 
+
+    trans: Vector which translates X to X_o. X_o is an intermediary                          
+      basis which shares its origin with X*  
+
+    argz: angle about the z-axis in X_o which rotates X_o into X_z                       
+      (X_z is an intermediary basis)            
+
+    argy: angle about the y-axis in X_z which rotates X_z into X_y                           
+      (X_y is an intermediary basis)    
+                         
+    argx: angle about the x-axis in X_y which rotates X_y into X*                            
+
+  Returns                           
+  -------                                          
+
+    fout: function which takes input with respect to X                            
+
+  '''
+  def fout(x,*args,**kwargs):
+    assert np.shape(x)[1] == 3
+    x = x - trans
+    R = rotation_3d(argz,argy,argx).transpose()
+    x = np.einsum('ij,kj->ki',R,x)
+    return f(x,*args,**kwargs)
+
+  return fout
+
+
 def find_indices(domain,realizations):
   '''  
   returns an array of indices such that domain[indices[n]] == realizations[n]
