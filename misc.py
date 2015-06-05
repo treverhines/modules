@@ -5,6 +5,8 @@ import os
 import numpy as np
 import logging
 from functools import wraps
+import collections
+
 logger = logging.getLogger(__name__)
 
 
@@ -36,36 +38,72 @@ def decyear(*args):
                      /(time_year_end - time_year_start))
   return decimal_time
 
-
 class Timer:
   def __init__(self):
-    self.time_dict = {'init':timemod.time()}
-    self.last = 'init'
+    self.time_dict = collections.OrderedDict()
+    self.actime_dict = collections.OrderedDict()
 
-  def tic(self,ID='process'):
+  def tic(self,ID=None):
+    if ID is None:
+      itr = 0
+      while True:
+        n = 'process %s' % itr
+        if not self.time_dict.has_key(n):
+          ID = n
+          break
+
+        itr += 1
+
+    if self.time_dict.has_key(ID):
+      logger.warning('%s is already being timed' % ID)
+      return 
+
+    if not self.actime_dict.has_key(ID):
+      self.actime_dict[ID] = 0.0
+
     self.time_dict[ID] = timemod.time()
-    self.last = ID
-    logger.info('timing %s' % ID)
+
+    logger.debug('timing %s' % ID)
 
   def toc(self,ID=None):
     if ID is None:
-      ID = self.last
+      ID = self.time_dict.keys()[-1]
+
     curtime = timemod.time()
-    runtime = curtime - self.time_dict[ID]
+    runtime = curtime - self.time_dict.pop(ID)
+    self.actime_dict[ID] += runtime
+
+    disp = '%.4g %s' % self.convert(runtime)
+    
+    logger.debug('elapsed time for last call to %s: %s' % (ID,disp))
+    return 'elapsed time for last call to %s: %s' % (ID,disp)
+
+  def summary(self):
+    while len(self.time_dict.keys()) > 0:
+      self.toc()
+
+    for i,val in self.actime_dict.iteritems():    
+      disp = '%.4g %s' % self.convert(val)
+      logger.info('total time running %s: %s' % (i,disp))
+
+  def convert(self,t):
     unit = 's'
-    conversion = 1.0
-    if runtime < 1.0:
-      unit = 'ms'
-      conversion = 1000.0
-    if runtime > 60.0:
-      unit = 'min'
-      conversion = 1.0/60.0
-    if runtime > 3600.0:
+    if t > 3600.0:
       unit = 'hr'
-      conversion = 1.0/3600.0
-    disp_runtime = '%.4g %s' % (runtime*conversion,unit)
-    logger.info('elapsed time for %s: %s' % (ID,disp_runtime))
-    return 'elapsed time for %s: %s' % (ID,disp_runtime)
+      t /= 3600.0
+
+    elif t > 60.0:
+      unit = 'min'
+      t /= 60.0
+
+    elif t < 1.0:
+      unit = 'ms'
+      t *= 1000.0
+
+    return t,unit
+
+
+GLOBAL_TIMER = Timer()
 
 
 def funtime(fun):
@@ -75,11 +113,23 @@ def funtime(fun):
   @wraps(fun)
   def subfun(*args,**kwargs):
     t = Timer()
-    t.tic(fun.__name__)
+    GLOBAL_TIMER.tic(fun.__name__)
     out = fun(*args,**kwargs)
-    t.toc(fun.__name__)
+    GLOBAL_TIMER.toc(fun.__name__)
     return out
   return subfun
+
+
+def tic(*args,**kwargs):
+  return GLOBAL_TIMER.tic(*args,**kwargs)
+
+
+def toc(*args,**kwargs):
+  return GLOBAL_TIMER.toc(*args,**kwargs)
+
+
+def summary(*args,**kwargs):
+  return GLOBAL_TIMER.summary(*args,**kwargs)
 
 
 def _baseN_to_base10(value_baseN,base_char):

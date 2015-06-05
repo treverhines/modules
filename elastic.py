@@ -73,7 +73,7 @@ def three_layer(y,p,slip,mu3,mu2,mu1,h3,h2,terms=5):
   -------------------------------------------------------
                                   
                                   mu1
-                                                                                                                  
+                                                                         
   Parameters 
   ---------- 
     
