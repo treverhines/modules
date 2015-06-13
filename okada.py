@@ -93,7 +93,7 @@ def rotation_3d(argZ,argY,argX):
                  [           0.0,  np.sin(argX),  np.cos(argX)]])
   return R1.dot(R2.dot(R3))
 
-@misc.funtime
+
 def dislocation(points,
                 slip,
                 anchor,
@@ -113,13 +113,15 @@ def dislocation(points,
   ----------
    
     points: N by 3 array of coordinates where the displacements or 
-      displacement derivatives will be computed
+      displacement derivatives will be computed. The problem domain
+      is all points where the z is less than or equal to zero (which
+      is consistent with Okada 92)
 
     slip: length 3 array describing left-lateral, thrust, and tensile 
       motion on the fault
 
-    anchor: The position of the top corner of the fault patch which 
-     has the fault continuing in the strike direction
+    anchor: The position of the top corner of the fault patch where 
+      the fault is continuing in the strike direction
 
     length: length of the fault in the strike direction
 
@@ -134,6 +136,13 @@ def dislocation(points,
 
     output_type: either 'displacement', 'dudx', 'dudy', or 'dudz'
 
+  Note
+  ----
+    very verbose Runtime Warnings will be printed when the output
+    points lie on the buried edges of the fault.  This function may
+    still return finite values despite the fact that there are 
+    clearly singularities at the edges.  
+
   '''
   # compute fault geometry parameters
   p = np.array(points,copy=True)
@@ -143,7 +152,6 @@ def dislocation(points,
   # compute depth to fault bottom
   c = width*np.sin(dip) - anchor[2]
   
-
   # translate points so that the origin coincides with the top fault 
   # corner in the coordinate system used by okada92
   p[:,[0,1]] -= anchor[[0,1]]
