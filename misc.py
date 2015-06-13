@@ -82,6 +82,7 @@ class Timer:
     while len(self.time_dict.keys()) > 0:
       self.toc()
 
+    logger.info('---- TIME SUMMARY ----')
     for i,val in self.actime_dict.iteritems():    
       disp = '%.4g %s' % self.convert(val)
       logger.info('total time running %s: %s' % (i,disp))
@@ -287,7 +288,7 @@ def rotation_3d(argz,argy,argx):
   return rotation3D(argz,argy,argx)
 
 
-def change_domain_basis(f,trans,argz,argy,argx):
+def change_domain_basis(f,trans,argz,argy,argx,dz=1.0,dy=1.0,dx=1.0):
   '''                    
   Takes a function with domain in R3 and input points are defined with     
   respect to the to the coordinate basis X* and returns the same     
@@ -309,8 +310,10 @@ def change_domain_basis(f,trans,argz,argy,argx):
     argy: angle about the y-axis in X_z which rotates X_z into X_y                           
       (X_y is an intermediary basis)    
                          
-    argx: angle about the x-axis in X_y which rotates X_y into X*                            
+    argx: angle about the x-axis in X_y which rotates X_y into X*
 
+    dx,dy,dz: additional scaling to stretch the x y and z axis 
+     
   Returns                           
   -------                                          
 
@@ -322,6 +325,9 @@ def change_domain_basis(f,trans,argz,argy,argx):
     x = x - trans
     R = rotation_3d(argz,argy,argx).transpose()
     x = np.einsum('ij,kj->ki',R,x)
+    x[:,0] /= dx
+    x[:,1] /= dy
+    x[:,2] /= dz
     return f(x,*args,**kwargs)
 
   return fout

@@ -1,43 +1,8 @@
 #!/usr/bin/env python
 import numpy as np
+import misc
 from misc import rotation3D
-tol = 1e-10
-
-##------------------------------------------------------------------
-def rotate_vectors(x,y,z,R):
-  '''
-  Rotates [x,y,z] by R
-  '''
-  points   = len(x)
-  vec_list = [R.dot(np.array([x[i],y[i],z[i]])) for i in range(points)]
-  vec_list = np.array(vec_list)      
-  x_rot    = vec_list[:,0]
-  y_rot    = vec_list[:,1]
-  z_rot    = vec_list[:,2]
-  return np.array([x_rot,y_rot,z_rot])
-
-##------------------------------------------------------------------
-def rotate_matrix(xx,yy,zz,xy,xz,yz,R):
-  '''
-  Rotates [[xx,xy,xz],[xy,yy,yz],[xz,yz,zz]] by R
-  '''
-  points   = len(xx)
-  vec_list = []
-  for i in range(points):
-    mat         = np.array([[xx[i],xy[i],xz[i]],
-                            [xy[i],yy[i],yz[i]],
-                            [xz[i],yz[i],zz[i]]])
-    mat_rotated = R.dot(mat).dot(R.transpose())
-    vec_list   += [mat_rotated.flatten()]
-
-  vec_list  = np.array(vec_list)
-  xx_rot    = vec_list[:,0]
-  yy_rot    = vec_list[:,4]
-  zz_rot    = vec_list[:,8]
-  xy_rot    = vec_list[:,1]
-  xz_rot    = vec_list[:,2]
-  yz_rot    = vec_list[:,5]
-  return np.array([xx_rot,yy_rot,zz_rot,xy_rot,xz_rot,yz_rot])
+tol = 1e-8
 
 ##------------------------------------------------------------------
 def okada_disp(x,y,z,U,fault_top_corner,fault_length,fault_strike,
@@ -108,122 +73,147 @@ def okada_disp(x,y,z,U,fault_top_corner,fault_length,fault_strike,
   z_out             = unrotated_points[2]
   return np.array([x_out,y_out,z_out])
 
-##------------------------------------------------------------------
-def okada_strain(x,y,z,U,fault_top_corner,fault_length,
-                 fault_strike,fault_width,fault_dip,
-                 lamb=3.2e10,mu=3.2e10):
-  '''
-  NOT VERIFIED
-  '''
-  if (fault_dip < 0.0) | (fault_dip > np.pi/2.0):
-    print('dip must be between 0 and pi/2')
-    return
-                     
-  fault_depth       = fault_top_corner[2]
-  fault_depth       = -fault_depth + fault_width*np.sin(fault_dip) # fault depth in Okada92 is depth
-  x_trans           = x - fault_top_corner[0]                # at the bottom of the fault, but  
-  y_trans           = y - fault_top_corner[1]                # that is inconvenient...
-  Zangle            = -fault_strike + np.pi/2.0
-  rotation_matrix   = rotation3D(Zangle,0.0,0.0)
-  rotation_matrix   = rotation_matrix.transpose() # I want to rotate reference frame, not body
-  rotated_points    = rotate_vectors(x_trans,y_trans,z,rotation_matrix)
-  x_rot             = rotated_points[0]
-  y_rot             = rotated_points[1]
-  z_rot             = rotated_points[2]
-  y_rot             = y_rot + fault_width*np.cos(fault_dip)
-  dudx              = Okada92(x_rot,y_rot,z_rot,U,fault_length,fault_width,
-                              fault_depth,fault_dip,'dudx',lamb,mu)  
-  dudy              = Okada92(x_rot,y_rot,z_rot,U,fault_length,fault_width,
-                              fault_depth,fault_dip,'dudy',lamb,mu)  
-  dudz              = Okada92(x_rot,y_rot,z_rot,U,fault_length,fault_width,
-                              fault_depth,fault_dip,'dudz',lamb,mu)  
 
-  strain_xx         = dudx[0]
-  strain_yy         = dudy[1]
-  strain_zz         = dudz[2]
-  strain_xy         = 0.5*(dudy[0] + dudx[1])
-  strain_xz         = 0.5*(dudz[0] + dudx[2])
-  strain_yz         = 0.5*(dudz[1] + dudy[2])
-  unrotated_strain  = rotate_matrix(strain_xx,strain_yy,strain_zz,
-                                    strain_xy,strain_xz,strain_yz,
-                                    rotation_matrix.transpose()) 
-  strain_xx_out     = unrotated_strain[0]
-  strain_yy_out     = unrotated_strain[1]
-  strain_zz_out     = unrotated_strain[2]
-  strain_xy_out     = unrotated_strain[3]
-  strain_xz_out     = unrotated_strain[4]
-  strain_yz_out     = unrotated_strain[5]
-  return np.array([strain_xx_out,strain_yy_out,strain_zz_out,
-                   strain_xy_out,strain_xz_out,strain_yz_out])
-
-##------------------------------------------------------------------
-def traction_force(xx,yy,zz,xy,xz,yz,strike,dip):
-  R              = rotation(strike,dip)
-  rotated_stress = rotate_matrix(xx,yy,zz,xy,xz,yz,R)
-  normal_trac    = rotated_stress[2]
-  strike_trac    = rotated_stress[4]
-  dip_trac       = rotated_stress[5]
-  return np.array([strike_trac,dip_trac,normal_trac])
-
-##------------------------------------------------------------------
-def coulumb_stress(xx,yy,zz,xy,xz,yz,strike,dip):
-  mu             = 0.4
-  R              = rotation(strike,dip)
-  rotated_stress = rotate_matrix(xx,yy,zz,xy,xz,yz,R)
-  normal_stress  = rotated_stress[2]
-  strike_stress  = rotated_stress[4]
-  dip_stress     = rotated_stress[5]
-  shear_stress   = np.sqrt(np.power(strike_stress,2.0) + 
-                           np.power(dip_stress,2.0))
-  coulumb_stress = strike_stress - mu*normal_stress
-  return coulumb_stress
-
-##------------------------------------------------------------------
-def okada_stress(x,y,z,U,fault_top_corner,fault_length,
-                 fault_strike,fault_width,fault_dip,
-                 lamb=3.2e10,mu=3.2e10):
+def rotation_3d(argZ,argY,argX):
   '''
-  NOT VERIFIED
+  creates a matrix which rotates a coordinate in 3 dimensional space
+  about the z axis by argz, the y axis by argy, and the x axis by
+  argx, in that order
   '''
-  strain_lst = okada_strain(x,y,z,U,fault_top_corner,fault_length,
-                            fault_strike,fault_width,fault_dip,
-                            lamb=3.2e10,mu=3.2e10)
-  C    = np.array([[2*mu + lamb,         lamb,         lamb, 0.0, 0.0, 0.0],
-                   [       lamb,  2*mu + lamb,         lamb, 0.0, 0.0, 0.0],
-                   [       lamb,         lamb,  2*mu + lamb, 0.0, 0.0, 0.0],
-                   [        0.0,          0.0,          0.0,  mu, 0.0, 0.0], 
-                   [        0.0,          0.0,          0.0, 0.0, mu,  0.0], 
-                   [        0.0,          0.0,          0.0, 0.0, 0.0,  mu]])
-  stress = np.array([C.dot(strain) for strain in strain_lst.transpose()])
-  stress = stress.transpose()
-  print(np.shape(stress))  
-  return stress 
+  R1 = np.array([[  np.cos(argZ), -np.sin(argZ),           0.0],
+                 [  np.sin(argZ),  np.cos(argZ),           0.0],
+                 [           0.0,           0.0,           1.0]])
 
-##------------------------------------------------------------------  
-def Okada92(x,y,z,U,L,W,c,delta,output,lamb=3.2e10,mu=3.2e10):
+  R2 = np.array([[  np.cos(argY),           0.0,  np.sin(argY)],
+                 [           0.0,           1.0,           0.0],
+                 [ -np.sin(argY),           0.0,  np.cos(argY)]])
+
+  R3 = np.array([[           1.0,           0.0,           0.0],
+                 [           0.0,  np.cos(argX), -np.sin(argX)],
+                 [           0.0,  np.sin(argX),  np.cos(argX)]])
+  return R1.dot(R2.dot(R3))
+
+@misc.funtime
+def dislocation(points,
+                slip,
+                anchor,
+                length,
+                width,
+                strike,
+                dip,
+                output_type='disp',
+                lamb=3.2e10,
+                mu=3.2e10):
   '''
-  Description:                                                                
-    computes displacements at points (x,y,z) for a fault with       
-    width W, length L, and depth c.  The fault has one end on the              
-    origin and the other end at (x=L,y=0).  Slip on the fault is described 
-    by U.                                                            
-  Arguments:                                                         
-    x: along strike coordinate of output locations (can be a vector)           
-    y: perpendicular to strike coordinate of output locations (can be a vector)
-    z: depth of output locations. down is negative
-    L: length of fault                                                         
-    W: width of fault                                                          
-    c: depth of the bottom of the fault (a fault which ruptures the surface
-       with have d=W, and d<W will give absurd results)                       
-    delta: fault dip.  0<delta<pi/2.0 will dip in the -y direction. and        
-           pi/2<delta<pi will dip in the +y direction... i think.           
-    U: a three components vector with strike-slip, dip-slip, and tensile       
-       components of slip                         
-    output: either 'disp','dudx','dudy', or 'dudz'                             
+  wrapper for okada92 which handles coordinate system rotations
+  and translations needed to describe faults not anchored at the 
+  origin and oriented along the x axis.
+
+  Parameters
+  ----------
+   
+    points: N by 3 array of coordinates where the displacements or 
+      displacement derivatives will be computed
+
+    slip: length 3 array describing left-lateral, thrust, and tensile 
+      motion on the fault
+
+    anchor: The position of the top corner of the fault patch which 
+     has the fault continuing in the strike direction
+
+    length: length of the fault in the strike direction
+
+    width: width of the fault in the dip direction
+  
+    strike: angle of the fault patch in radians with respect to the y
+      axis (clockwise is positive). This is consistent with the strike
+      which would be used for a east-north-vertical coordinate system
+
+    dip: The angle of the fault patch with respect to horizontal. This
+      is in radians and should be between 0 and pi/2
+
+    output_type: either 'displacement', 'dudx', 'dudy', or 'dudz'
+
+  '''
+  # compute fault geometry parameters
+  p = np.array(points,copy=True)
+  anchor = np.asarray(anchor)
+  slip = np.asarray(slip)
+
+  # compute depth to fault bottom
+  c = width*np.sin(dip) - anchor[2]
+  
+
+  # translate points so that the origin coincides with the top fault 
+  # corner in the coordinate system used by okada92
+  p[:,[0,1]] -= anchor[[0,1]]
+
+  # angle between current reference frame and reference frame used by
+  # okada92 (i.e. x axis along strike direction)
+  argZ = np.pi/2.0 - strike
+
+  # rotation matrix which changes the reference frame to that used by
+  # okada92 
+  R = rotation_3d(-argZ,0.0,0.0)
+
+  # rotate coordinate system of points
+  p = np.einsum('ij,kj->ki',R,p)
+  
+  # shift along the dip direction so that the origin coincides with 
+  # the okada92 origin
+  p[:,1] +=  width*np.cos(dip)
+
+  out = okada92(p[:,0],p[:,1],p[:,2],
+                slip,length,width,
+                c,dip,output_type,lamb,mu)  
+
+  out = np.array(out).transpose()
+
+  # the current output is in the okada92 coordinate system and needs
+  # to be rotated back to the original 
+  R = rotation_3d(argZ,0.0,0.0)
+  out = np.einsum('ij,kj->ki',R,out)
+
+  return out
+
+
+def okada92(x,y,z,U,L,W,c,delta,output,lamb=3.2e10,mu=3.2e10):
+  '''
+  computes displacements resulting from a rectangular dislocation in 
+  a 3-D halfspace.  The notation used here coincides with that used 
+  by Okada 92.  See figure 3 in Okada 92 for a schematic illustration
+  of the input parameters.  
+
+  Parameters
+  ----------
+  
+    x: 1-D array of length N containing x coordinates of output points
+
+    y: 1-D array of length N containing y coordinates of output points
+
+    z: 1-D array of length N containing z coordinates of output points
+
+    U: length 3 sequence describing fault motion. The components 
+      describe left-lateral, thrust, and tensile motion
+
+    c: Depth to the base of the fault (see figure 3 in Okada 92)
+
+    delta: fault angle with respect to the horizontal plane. Values 
+      should be between 0 and pi/2
+
+    output: type of output to produce. Either 'disp', 'dudx', 'dudy', 
+      or 'dudz' 
+
+    lamb: (optional) scalar for the first Lame parameter
+
+    mu: (optional) scalar for the second Lame parameter
                                                                              
-  output:                                                                      
+  Returns
+  -------
+
     tuple where each components is a vector of either diplacement or 
-    displacement derivatives in the x, y, or z direction  
+    displacement derivatives in the x, y, or z direction
+
   '''                                            
   sindel      = np.sin(delta)
   cosdel      = np.cos(delta)
@@ -231,186 +221,186 @@ def Okada92(x,y,z,U,L,W,c,delta,output,lamb=3.2e10,mu=3.2e10):
   alpha       = (lamb + mu)/(lamb + 2*mu)
 
   def f(eps,eta,zeta,term,direction):
-    X            = np.zeros(points)
-    R            = np.zeros(points)
-    y_bar        = np.zeros(points)
-    c_bar        = np.zeros(points)
-    d_bar        = np.zeros(points)
-    X11          = np.zeros(points)
-    X32          = np.zeros(points)
-    X53          = np.zeros(points)
-    Y11          = np.zeros(points)
-    Y32          = np.zeros(points)
-    Y53          = np.zeros(points)
-    h            = np.zeros(points)
-    theta        = np.zeros(points)
-    logReps      = np.zeros(points)
-    logReta      = np.zeros(points)
-    I1           = np.zeros(points)
-    I2           = np.zeros(points)
-    I3           = np.zeros(points)
-    I4           = np.zeros(points)
-    K1           = np.zeros(points)
-    K2           = np.zeros(points)
-    K3           = np.zeros(points)
-    K4           = np.zeros(points)
-    D11          = np.zeros(points)
-    J1           = np.zeros(points)
-    J2           = np.zeros(points)
-    J3           = np.zeros(points)
-    J4           = np.zeros(points)
-    J5           = np.zeros(points)
-    J6           = np.zeros(points)
-    E            = np.zeros(points)
-    F            = np.zeros(points)
-    G            = np.zeros(points)
-    H            = np.zeros(points)
-    P            = np.zeros(points)
-    Q            = np.zeros(points)
-    Ep           = np.zeros(points)
-    Fp           = np.zeros(points)
-    Gp           = np.zeros(points)
-    Hp           = np.zeros(points)
-    Pp           = np.zeros(points)
-    Qp           = np.zeros(points)
+    X = np.zeros(points)
+    R = np.zeros(points)
+    y_bar = np.zeros(points)
+    c_bar = np.zeros(points)
+    d_bar = np.zeros(points)
+    X11 = np.zeros(points)
+    X32 = np.zeros(points)
+    X53 = np.zeros(points)
+    Y11 = np.zeros(points)
+    Y32 = np.zeros(points)
+    Y53 = np.zeros(points)
+    h = np.zeros(points)
+    theta = np.zeros(points)
+    logReps = np.zeros(points)
+    logReta = np.zeros(points)
+    I1 = np.zeros(points)
+    I2 = np.zeros(points)
+    I3 = np.zeros(points)
+    I4 = np.zeros(points)
+    K1 = np.zeros(points)
+    K2 = np.zeros(points)
+    K3 = np.zeros(points)
+    K4 = np.zeros(points)
+    D11 = np.zeros(points)
+    J1 = np.zeros(points)
+    J2 = np.zeros(points)
+    J3 = np.zeros(points)
+    J4 = np.zeros(points)
+    J5 = np.zeros(points)
+    J6 = np.zeros(points)
+    E = np.zeros(points)
+    F = np.zeros(points)
+    G = np.zeros(points)
+    H = np.zeros(points)
+    P = np.zeros(points)
+    Q = np.zeros(points)
+    Ep = np.zeros(points)
+    Fp = np.zeros(points)
+    Gp = np.zeros(points)
+    Hp = np.zeros(points)
+    Pp = np.zeros(points)
+    Qp = np.zeros(points)
 
-    d             = c - zeta
-    p             = y*cosdel + d*sindel
-    q             = y*sindel - d*cosdel
-    R             = np.sqrt(np.power(eps,2.0) + 
-                            np.power(eta,2.0) + 
-                            np.power(q,2.0))
+    d = c - zeta
+    p = y*cosdel + d*sindel
+    q = y*sindel - d*cosdel
+    R = np.sqrt(np.power(eps,2.0) + 
+                np.power(eta,2.0) + 
+                np.power(q,2.0))
 
-    X             = np.sqrt(np.power(eps,2.0) + 
-                            np.power(q,2.0))    
-    y_bar         = eta*cosdel + q*sindel
-    d_bar         = eta*sindel - q*cosdel
-    c_bar         = d_bar + zeta
-    h             = q*cosdel - zeta
+    X = np.sqrt(np.power(eps,2.0) + 
+                np.power(q,2.0))    
+    y_bar = eta*cosdel + q*sindel
+    d_bar = eta*sindel - q*cosdel
+    c_bar = d_bar + zeta
+    h = q*cosdel - zeta
 
-    idx           = np.abs(q) < tol 
-    nidx          = np.abs(q) >= tol 
-    theta[nidx]   = np.arctan(eps[nidx]*eta[nidx]/(q[nidx]*R[nidx]))
+    idx = np.abs(q) < tol 
+    nidx = np.abs(q) >= tol 
+    theta[nidx] = np.arctan(eps[nidx]*eta[nidx]/(q[nidx]*R[nidx]))
 
-    idx           = np.abs(R + eps) < tol
-    nidx          = np.abs(R + eps) >= tol
-    X11[nidx]     = 1.0/(R[nidx]*(R[nidx] + eps[nidx]))
-    X32[nidx]     = ((2*R[nidx] + eps[nidx])/(np.power(R[nidx],3.0)*
-                     np.power((R[nidx] + eps[nidx]),2.0)))
-    X53[nidx]     = ((8*np.power(R[nidx],2.0) + 
-                      9*R[nidx]*eps[nidx] + 
-                      3*np.power(eps[nidx],2.0))/
-                     (np.power(R[nidx],5.0)*
-                      (np.power(R[nidx] + eps[nidx],3.0))))
+    idx = np.abs(R + eps) < tol
+    nidx = np.abs(R + eps) >= tol
+    X11[nidx] = 1.0/(R[nidx]*(R[nidx] + eps[nidx]))
+    X32[nidx] = ((2*R[nidx] + eps[nidx])/(np.power(R[nidx],3.0)*
+                 np.power((R[nidx] + eps[nidx]),2.0)))
+    X53[nidx] = ((8*np.power(R[nidx],2.0) + 
+                  9*R[nidx]*eps[nidx] + 
+                  3*np.power(eps[nidx],2.0))/
+                  (np.power(R[nidx],5.0)*
+                  (np.power(R[nidx] + eps[nidx],3.0))))
     logReps[idx]  = -np.log(R[idx] - eps[idx]) 
     logReps[nidx] = np.log(R[nidx] + eps[nidx]) 
 
-    idx           = np.abs(R + eta) < tol
-    nidx          = np.abs(R + eta) >= tol
-    Y11[nidx]     = 1.0/(R[nidx]*(R[nidx] + eta[nidx]))
-    Y32[nidx]     = ((2*R[nidx] + eta[nidx])/(np.power(R[nidx],3.0)*
-                     np.power((R[nidx] + eta[nidx]),2.0)))
-    Y53[nidx]     = ((8*np.power(R[nidx],2.0) + 
-                      9*R[nidx]*eta[nidx] + 
-                      3*np.power(eta[nidx],2.0))/
-                     (np.power(R[nidx],5.0)*
-                      (np.power(R[nidx] + eta[nidx],3.0))))
+    idx = np.abs(R + eta) < tol
+    nidx = np.abs(R + eta) >= tol
+    Y11[nidx] = 1.0/(R[nidx]*(R[nidx] + eta[nidx]))
+    Y32[nidx] = ((2*R[nidx] + eta[nidx])/(np.power(R[nidx],3.0)*
+                 np.power((R[nidx] + eta[nidx]),2.0)))
+    Y53[nidx] = ((8*np.power(R[nidx],2.0) + 
+                  9*R[nidx]*eta[nidx] + 
+                  3*np.power(eta[nidx],2.0))/
+                 (np.power(R[nidx],5.0)*
+                 (np.power(R[nidx] + eta[nidx],3.0))))
     logReta[idx]  = -np.log(R[idx] - eta[idx])
     logReta[nidx] = np.log(R[nidx] + eta[nidx])
   
     if np.abs(cosdel) >= tol:
-      I3          = (y_bar/(cosdel*(R + d_bar)) - 1/np.power(cosdel,2.0)*
-                     (logReta - sindel*np.log(R + d_bar)))
-      nidx        = np.abs(eps) >= tol
-      idx         = np.abs(eps) < tol
-      I4[nidx]    = ((sindel*eps[nidx])/(cosdel*(R[nidx] + d_bar[nidx])) + 
-                     2.0/np.power(cosdel,2.0)*
-                     np.arctan((eta[nidx]*(X[nidx] + q[nidx]*cosdel) + 
-                     X[nidx]*(R[nidx] + X[nidx])*sindel)/
-                     (eps[nidx]*(R[nidx] + X[nidx])*cosdel)))
-      I4[idx]     = (0.5*(eps[idx]*y_bar[idx])/
-                     np.power((R[idx] + d_bar[idx]),2.0)) 
+      I3 = (y_bar/(cosdel*(R + d_bar)) - 1/np.power(cosdel,2.0)*
+           (logReta - sindel*np.log(R + d_bar)))
+      nidx = np.abs(eps) >= tol
+      idx = np.abs(eps) < tol
+      I4[nidx] = ((sindel*eps[nidx])/(cosdel*(R[nidx] + d_bar[nidx])) + 
+                  2.0/np.power(cosdel,2.0)*
+                  np.arctan((eta[nidx]*(X[nidx] + q[nidx]*cosdel) + 
+                  X[nidx]*(R[nidx] + X[nidx])*sindel)/
+                  (eps[nidx]*(R[nidx] + X[nidx])*cosdel)))
+      I4[idx] = (0.5*(eps[idx]*y_bar[idx])/
+                np.power((R[idx] + d_bar[idx]),2.0)) 
     else:
-      I3          = (0.5*(eta/(R + d_bar) + (y_bar*q)/
-                     np.power((R + d_bar),2.0) - logReta))
-      I4          = 0.5*(eps*y_bar)/np.power((R + d_bar),2.0) 
+      I3 = (0.5*(eta/(R + d_bar) + (y_bar*q)/
+           np.power((R + d_bar),2.0) - logReta))
+      I4 = 0.5*(eps*y_bar)/np.power((R + d_bar),2.0) 
 
 
-    I2            = np.log(R + d_bar) + I3*sindel
-    I1            = -eps/(R + d_bar)*cosdel - I4*sindel
-    Y0            = Y11 - np.power(eps,2.0)*Y32
-    Z32           = sindel/np.power(R,3.0) - h*Y32
-    Z53           = 3*sindel/np.power(R,5.0) - h*Y53
-    Z0            = Z32 - np.power(eps,2.0)*Z53
+    I2 = np.log(R + d_bar) + I3*sindel
+    I1 = -eps/(R + d_bar)*cosdel - I4*sindel
+    Y0 = Y11 - np.power(eps,2.0)*Y32
+    Z32 = sindel/np.power(R,3.0) - h*Y32
+    Z53 = 3*sindel/np.power(R,5.0) - h*Y53
+    Z0 = Z32 - np.power(eps,2.0)*Z53
   
-    D11           = 1.0/(R*(R + d_bar))
-    J2            = eps*y_bar/(R + d_bar)*D11
-    J5            = -(d_bar + np.power(y_bar,2.0)/(R + d_bar))*D11
+    D11 = 1.0/(R*(R + d_bar))
+    J2 = eps*y_bar/(R + d_bar)*D11
+    J5 = -(d_bar + np.power(y_bar,2.0)/(R + d_bar))*D11
 
     if np.abs(cosdel) >= tol:
-      K1      = eps/cosdel*(D11 - Y11*sindel)
-      K3      = 1.0/cosdel*(q*Y11 - y_bar*D11)
-      J3      = 1.0/cosdel*(K1 - J2*sindel)
-      J6      = 1.0/cosdel*(K3 - J5*sindel)
+      K1 = eps/cosdel*(D11 - Y11*sindel)
+      K3 = 1.0/cosdel*(q*Y11 - y_bar*D11)
+      J3 = 1.0/cosdel*(K1 - J2*sindel)
+      J6 = 1.0/cosdel*(K3 - J5*sindel)
     else:
-      K1       = eps*q/(R + d_bar)*D11
-      K3       = (sindel/(R + d_bar)*
-                  (np.power(eps,2.0)*D11 - 1))
-      J3       = (-eps/np.power((R + d_bar),2.0)*
-                  (np.power(q,2.0)*D11 - 0.5))
-      J6       = (-y_bar/np.power((R + d_bar),2.0)*
-                  (np.power(eps,2.0)*D11 - 0.5))
+      K1 = eps*q/(R + d_bar)*D11
+      K3 = (sindel/(R + d_bar)*
+           (np.power(eps,2.0)*D11 - 1))
+      J3 = (-eps/np.power((R + d_bar),2.0)*
+           (np.power(q,2.0)*D11 - 0.5))
+      J6 = (-y_bar/np.power((R + d_bar),2.0)*
+           (np.power(eps,2.0)*D11 - 0.5))
   
-    K4            = eps*Y11*cosdel - K1*sindel
-    K2            = 1.0/R + K3*sindel
-    J4            = -eps*Y11 - J2*cosdel + J3*sindel
-    J1            = J5*cosdel - J6*sindel
-    E             = sindel/R - y_bar*q/np.power(R,3.0)
-    F             = d_bar/np.power(R,3.0) + np.power(eps,2.0)*Y32*sindel
-    G             = 2.0*X11*sindel - y_bar*q*X32
-    H             = d_bar*q*X32 + eps*q*Y32*sindel
-    P             = cosdel/np.power(R,3.0) + q*Y32*sindel
-    Q             = 3*c_bar*d_bar/np.power(R,5.0) - (zeta*Y32 + Z32 + Z0)*sindel
-    Ep            = cosdel/R + d_bar*q/np.power(R,3.0)
-    Fp            = y_bar/np.power(R,3.0) + np.power(eps,2.0)*Y32*cosdel
-    Gp            = 2.0*X11*cosdel + d_bar*q*X32
-    Hp            = y_bar*q*X32 + eps*q*Y32*cosdel
-    Pp            = sindel/np.power(R,3.0) - q*Y32*cosdel
-    Qp            = (3*c_bar*y_bar/np.power(R,5.0) + 
-                     q*Y32 - (zeta*Y32 + Z32 + Z0)*cosdel)
+    K4 = eps*Y11*cosdel - K1*sindel
+    K2 = 1.0/R + K3*sindel
+    J4 = -eps*Y11 - J2*cosdel + J3*sindel
+    J1 = J5*cosdel - J6*sindel
+    E = sindel/R - y_bar*q/np.power(R,3.0)
+    F = d_bar/np.power(R,3.0) + np.power(eps,2.0)*Y32*sindel
+    G = 2.0*X11*sindel - y_bar*q*X32
+    H = d_bar*q*X32 + eps*q*Y32*sindel
+    P = cosdel/np.power(R,3.0) + q*Y32*sindel
+    Q = 3*c_bar*d_bar/np.power(R,5.0) - (zeta*Y32 + Z32 + Z0)*sindel
+    Ep = cosdel/R + d_bar*q/np.power(R,3.0)
+    Fp = y_bar/np.power(R,3.0) + np.power(eps,2.0)*Y32*cosdel
+    Gp = 2.0*X11*cosdel + d_bar*q*X32
+    Hp = y_bar*q*X32 + eps*q*Y32*cosdel
+    Pp = sindel/np.power(R,3.0) - q*Y32*cosdel
+    Qp = (3*c_bar*y_bar/np.power(R,5.0) + 
+         q*Y32 - (zeta*Y32 + Z32 + Z0)*cosdel)
 
     if output == 'disp':
       if direction == 'strike':
         if term == 'A':
-          f1   = theta/2.0 + alpha/2.0*eps*q*Y11  
-          f2   = alpha/2.0*q/R
-          f3   = (1-alpha)/2.0*logReta - alpha/2.0*np.power(q,2.0)*Y11
+          f1 = theta/2.0 + alpha/2.0*eps*q*Y11  
+          f2 = alpha/2.0*q/R
+          f3 = (1-alpha)/2.0*logReta - alpha/2.0*np.power(q,2.0)*Y11
         if term == 'B':
-          f1   = -eps*q*Y11 - theta - (1- alpha)/alpha*I1*sindel
-          f2   = -q/R + (1-alpha)/alpha*y_bar/(R+d_bar)*sindel
-          f3   = np.power(q,2.0)*Y11 - (1 - alpha)/alpha*I2*sindel
+          f1 = -eps*q*Y11 - theta - (1- alpha)/alpha*I1*sindel
+          f2 = -q/R + (1-alpha)/alpha*y_bar/(R+d_bar)*sindel
+          f3 = np.power(q,2.0)*Y11 - (1 - alpha)/alpha*I2*sindel
         if term == 'C':
-          f1   = (1-alpha)*eps*Y11*cosdel - alpha*eps*q*Z32
-          f2   = ((1-alpha)*(cosdel/R + 2*q*Y11*sindel) - 
+          f1 = (1-alpha)*eps*Y11*cosdel - alpha*eps*q*Z32
+          f2 = ((1-alpha)*(cosdel/R + 2*q*Y11*sindel) - 
                   alpha*c_bar*q/np.power(R,3.0))
-          f3   = ((1-alpha)*q*Y11*cosdel - 
+          f3 = ((1-alpha)*q*Y11*cosdel - 
                   alpha*(c_bar*eta/np.power(R,3.0) - 
                   zeta*Y11 + np.power(eps,2.0)*Z32))
       if direction == 'dip':
         if term == 'A':
-          f1  = alpha/2.0*q/R
-          f2  = theta/2.0 + alpha/2.0*eta*q*X11
-          f3  = (1-alpha)/2.0*logReps - alpha/2.0*np.power(q,2.0)*X11
+          f1 = alpha/2.0*q/R
+          f2 = theta/2.0 + alpha/2.0*eta*q*X11
+          f3 = (1-alpha)/2.0*logReps - alpha/2.0*np.power(q,2.0)*X11
         if term == 'B':
-          f1  = -q/R + (1 - alpha)/alpha*I3*sindel*cosdel
-          f2  = (-eta*q*X11 - theta - (1-alpha)/alpha*
+          f1 = -q/R + (1 - alpha)/alpha*I3*sindel*cosdel
+          f2 = (-eta*q*X11 - theta - (1-alpha)/alpha*
                  eps/(R + d_bar)*sindel*cosdel)
-          f3  = np.power(q,2.0)*X11 + (1-alpha)/alpha*I4*sindel*cosdel
+          f3 = np.power(q,2.0)*X11 + (1-alpha)/alpha*I4*sindel*cosdel
         if term == 'C':
-          f1  = ((1-alpha)*cosdel/R - q*Y11*sindel - 
+          f1 = ((1-alpha)*cosdel/R - q*Y11*sindel - 
                  alpha*c_bar*q/np.power(R,3.0))
-          f2  = (1 - alpha)*y_bar*X11 - alpha*c_bar*eta*q*X32
-          f3  = (-d_bar*X11 - eps*Y11*sindel - 
+          f2 = (1 - alpha)*y_bar*X11 - alpha*c_bar*eta*q*X32
+          f3 = (-d_bar*X11 - eps*Y11*sindel - 
                  alpha*c_bar*(X11 - np.power(q,2.0)*X32))
       if direction == 'tensile':
         if term == 'A':
@@ -634,8 +624,8 @@ def Okada92(x,y,z,U,L,W,c,delta,output,lamb=3.2e10,mu=3.2e10):
   for itr,direction in enumerate(['strike','dip','tensile']):
     p          = y*cosdel + (c - z)*sindel
     p_         = y*cosdel + (c + z)*sindel # it is unclear if p_ is needed
-                                           # based on the text. this could be   
-    fI = f(x,p,z,'A',direction)            # the cause of an error
+                                           # based on the text. 
+    fI = f(x,p,z,'A',direction)            
     fII = f(x,p - W,z,'A',direction)
     fIII = f(x-L,p,z,'A',direction)
     fIV = f(x-L,p - W,z,'A',direction)
@@ -686,10 +676,11 @@ def Okada92(x,y,z,U,L,W,c,delta,output,lamb=3.2e10,mu=3.2e10):
              (uA3 - uhatA3 + uB3 + z*uC3)*sindel))
       uz += (U[itr]/(2*np.pi)*((uA2 - uhatA2 + uB2 - z*uC2)*sindel + 
              (uA3 - uhatA3 + uB3 - z*uC3)*cosdel))
+
   return np.array([ux,uy,uz]) 
 
 ##------------------------------------------------------------------
-def Okada85(x,y,L,W,d,delta,U):                                                
+def okada85(x,y,L,W,d,delta,U):                                                
   '''                                                                           
   Description:                                                                  
     computes displacements at points (x,y) for a fault with                
