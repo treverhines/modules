@@ -1,77 +1,6 @@
 #!/usr/bin/env python
 import numpy as np
-import misc
-from misc import rotation3D
 tol = 1e-8
-
-##------------------------------------------------------------------
-def okada_disp(x,y,z,U,fault_top_corner,fault_length,fault_strike,
-               fault_width,fault_dip,lamb=3.2e10,mu=3.2e10):
-  '''
-  Description:                                       
-    computes displacements at points (x,y,z) for a fault with specified
-    geometry and slip components                         
-
-  Arguments:                                        
-    x: vector of output location x coordinates            
-    y: vector of output location y coordinates            
-    z: vector of output location z coordinates 
-    fault_top_corner: (x,y,z) coordinates of the fault corner from 
-                      which the fault continues in the both the 
-                      strike and dip direction.
-    fault_length:
-    fault_strike: strike using the right hand rule convention
-    fault_width:                                    
-    fault_dip: This is between 0 and pi/2               
-    U: slip vector with three components: left-lateral, thrust, tensile.
-    lamb: lambda lame constant
-    mu: mu lame constant
-  
-  output:                                                                      
-    tuple where each components is a vector of displacement in the x, y, or z  
-    direction                                                       
-
-  example usage:
-    >>> x = np.arange(-10,10)
-    >>> y = np.arange(-10,10)
-    >>> xgrid,ygrid = np.meshgrid(x,y)
-    >>> xlst = xgrid.flatten()
-    >>> ylst = ygrid.flatten()   
-    >>> zlst = 0*ylst
-    >>> U = [1.0,0.0,0.0]
-    >>> corner  = [1.5,1.5,0.0]
-    >>> length = 5 
-    >>> width  = 5
-    >>> strike = 0.0
-    >>> dip = np.pi/2.0
-    >>> output = okada_disp(xlst,ylst,zlst,U,corner,length,strike,width,dip)
-    >>> plt.quiver(xlst,ylst,output[0],output[1],output[2])
-    >>> plt.show()
-  '''                         
-  if (fault_dip < 0.0) | (fault_dip > np.pi/2.0):
-    print('dip must be between 0 and pi/2')
-    return
-                     
-  fault_depth       = fault_top_corner[2]
-  fault_depth       = -fault_depth + fault_width*np.sin(fault_dip) # fault depth in Okada92 is depth
-  x_trans           = x - fault_top_corner[0]                # at the bottom of the fault, but  
-  y_trans           = y - fault_top_corner[1]                # that is inconvenient...
-  Zangle            = -fault_strike + np.pi/2.0
-  rotation_matrix   = rotation3D(Zangle,0.0,0.0)
-  rotation_matrix   = rotation_matrix.transpose() # I want to rotate reference frame, not body
-  rotated_points    = rotate_vectors(x_trans,y_trans,z,rotation_matrix)
-  x_rot             = rotated_points[0]
-  y_rot             = rotated_points[1]
-  z_rot             = rotated_points[2]
-  y_rot             = y_rot + fault_width*np.cos(fault_dip)
-  out               = Okada92(x_rot,y_rot,z_rot,U,fault_length,fault_width,
-                              fault_depth,fault_dip,'disp',lamb,mu)  
-  unrotated_points  = rotate_vectors(out[0],out[1],out[2],
-                                     rotation_matrix.transpose())
-  x_out             = unrotated_points[0]
-  y_out             = unrotated_points[1]
-  z_out             = unrotated_points[2]
-  return np.array([x_out,y_out,z_out])
 
 
 def rotation_3d(argZ,argY,argX):
@@ -134,14 +63,43 @@ def dislocation(points,
     dip: The angle of the fault patch with respect to horizontal. This
       is in radians and should be between 0 and pi/2
 
-    output_type: either 'displacement', 'dudx', 'dudy', or 'dudz'
+    output_type: either 'disp', 'dudx', 'dudy', or 'dudz'
+
+  Returns
+  -------
+  
+    N by 3 array of displacement or its derivatives
 
   Note
   ----
-    very verbose Runtime Warnings will be printed when the output
-    points lie on the buried edges of the fault.  This function may
-    still return finite values despite the fact that there are 
-    clearly singularities at the edges.  
+
+    This function does not check for points which lie on the fault 
+    edge where the solution is not defined.  It is possible that
+    numpy will print very verbose Runtime Warnings and return a nan
+    or and inf and it is also possible that a finite value will be
+    returned although it will still be meaningless.  
+
+
+  Usage
+  -----
+
+    In [0]: import matplotlib.pyplot as plt
+    In [1]: from okada import dislocation
+    In [2]: x = np.linspace(-10,10,20)
+    In [3]: y = np.linspace(-10,10,20)
+    In [4]: xgrid,ygrid = np.meshgrid(x,y)
+    In [5]: x = xgrid.flatten()
+    In [6]: y = ygrid.flatten()
+    In [7]: z = 0*y
+    In [8]: points = np.array([x,y,z]).transpose()
+    In [9]: anchor = [-1.0,2.0,0.0]
+    In [10]: length = 5
+    In [11]: width = 1
+    In [12]: strike = np.pi/8.0
+    In [13]: slip = [1.0,0.0,0.0]
+    In [14]: out = dislocation(points,slip,anchor,length,width,strike,dip)
+    In [15]: plt.plot(x,y,out[:,0],out[:,1])
+    In [16]: plt.show()
 
   '''
   # compute fault geometry parameters
