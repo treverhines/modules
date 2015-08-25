@@ -15,7 +15,6 @@ def _unaugment(point):
   point = np.array(point,dtype=float,copy=True)    
   return point[...,:-1]
 
-
 class Transform:
   def __init__(self,M):
     M = np.asarray(M)
