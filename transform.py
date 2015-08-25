@@ -46,60 +46,85 @@ class Transform:
             self._M[[0,1,2],2])
 
   def __add__(self,other):
-    return Transform(other.M.dot(self._M))
+    return Transform(other._M.dot(self._M))
 
   def __sub__(self,other):
     return self + other.inverse()
 
 
-class PointRotationX(Transform):
-  '''point rotation about the x axis'''
-  def __init__(self,arg):
-    M = np.array([[1.0, 0.0, 0.0, 0.0],
-                  [0.0, np.cos(arg), -np.sin(arg), 0.0],
-                  [0.0, np.sin(arg), np.cos(arg), 0.0],
-                  [0.0, 0.0, 0.0, 1.0]])
-    Transform.__init__(self,M)
+def identity():
+  M = np.eye(4)
+  return Transform(M)
 
 
-class PointRotationY(Transform):
-  '''point rotation about the y axis'''
-  def __init__(self,arg):
-    M = np.array([[np.cos(arg), 0.0, np.sin(arg), 0.0],
-                  [0.0, 1.0, 0.0, 0.0],
-                  [-np.sin(arg), 0.0, np.cos(arg), 0.0],
-                  [0.0, 0.0, 0.0, 1.0]])
-    Transform.__init__(self,M)
+def point_rotation_x(arg):
+  M = np.array([[1.0, 0.0, 0.0, 0.0],
+                [0.0, np.cos(arg), -np.sin(arg), 0.0],
+                [0.0, np.sin(arg), np.cos(arg), 0.0],
+                [0.0, 0.0, 0.0, 1.0]])
+  return Transform(M)
 
 
-class PointRotationZ(Transform):
-  '''point rotation about the z axis'''
-  def __init__(self,arg):
-    M = np.array([[np.cos(arg), -np.sin(arg), 0.0, 0.0],
-                  [np.sin(arg), np.cos(arg), 0.0, 0.0],
-                  [0.0, 0.0, 1.0, 0.0],
-                  [0.0, 0.0, 0.0, 1.0]])
-    Transform.__init__(self,M)
+def point_rotation_y(arg):
+  M = np.array([[np.cos(arg), 0.0, np.sin(arg), 0.0],
+                [0.0, 1.0, 0.0, 0.0],
+                [-np.sin(arg), 0.0, np.cos(arg), 0.0],
+                [0.0, 0.0, 0.0, 1.0]])
+  return Transform(M)
 
 
-class PointStretch(Transform):
-  '''point stretch with respect to origin'''
-  def __init__(self,S):
-    M = np.array([[S[0], 0.0, 0.0, 0.0],
-                  [0.0, S[1], 0.0, 0.0],
-                  [0.0, 0.0, S[2], 0.0],
-                  [0.0, 0.0, 0.0, 1.0]])
-    Transform.__init__(self,M)
+def point_rotation_z(arg):
+  M = np.array([[np.cos(arg), -np.sin(arg), 0.0, 0.0],
+                [np.sin(arg), np.cos(arg), 0.0, 0.0],
+                [0.0, 0.0, 1.0, 0.0],
+                [0.0, 0.0, 0.0, 1.0]])
+  return Transform(M)
 
 
-class PointTranslation(Transform):
-  '''point translation'''
-  def __init__(self,T):
-    M = np.array([[1.0, 0.0, 0.0, T[0]],
-                  [0.0, 1.0, 0.0, T[1]],
-                  [0.0, 0.0, 1.0, T[2]],
-                  [0.0, 0.0, 0.0, 1.0]])
-    Transform.__init__(self,M)
+def point_translation(T):  
+  M = np.array([[1.0, 0.0, 0.0, T[0]],
+                [0.0, 1.0, 0.0, T[1]],
+                [0.0, 0.0, 1.0, T[2]],
+                [0.0, 0.0, 0.0, 1.0]])
+  return Transform(M)
+
+
+def point_stretch(S):
+  M = np.array([[S[0], 0.0, 0.0, 0.0],
+                [0.0, S[1], 0.0, 0.0],
+                [0.0, 0.0, S[2], 0.0],
+                [0.0, 0.0, 0.0, 1.0]])
+  return Transform(M)
+
+
+def basis_rotation_x(arg):
+  a = point_rotation_x(arg)
+  ainv = a.inverse()
+  return Transform(ainv.get_M())
+
+
+def basis_rotation_y(arg):
+  a = point_rotation_y(arg)
+  ainv = a.inverse()
+  return Transform(ainv.get_M())
+
+
+def basis_rotation_z(arg):
+  a = point_rotation_z(arg)
+  ainv = a.inverse()
+  return Transform(ainv.get_M())
+
+
+def basis_translation(T):
+  a = point_translation(T)
+  ainv = a.inverse()
+  return Transform(ainv.get_M())
+
+
+def basis_stretch(S):
+  a = point_stretch(S)
+  ainv = a.inverse()
+  return Transform(ainv.get_M())
 
 
 if __name__ == '__main__':
@@ -115,7 +140,7 @@ if __name__ == '__main__':
   ax.plot(p[:,0],p[:,1],p[:,2],'bo') 
 
   #p1 = T1(p)
-  T = PointTranslation([-1.0,0.0,0.0])
+  T = point_translation([-1.0,0.0,0.0])
   print(T.get_transformed_origin())
   print(T.get_transformed_bases())
   p2 = T(p)
