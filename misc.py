@@ -345,8 +345,8 @@ def find_indices(domain,realizations):
   
   domain_set = set(domain)
   realizations_set = set(realizations)
-  if len(domain_set) != len(domain):
-      raise ValueError('domain contains repeated values')
+  #if len(domain_set) != len(domain):
+  #   raise ValueError('domain contains repeated values')
 
   if not realizations_set.issubset(domain_set):
     intersection = realizations_set.intersection(domain_set)

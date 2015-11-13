@@ -419,7 +419,7 @@ def _draw_scale(basemap,ax,scale_length,quiver_scale,sigma_list,color_list,text_
           fontsize=16)
 
 ##------------------------------------------------------------------------------
-def _plot_tseries(ax,station,direction,disp_type,formats,time_range,ref_time=None):
+def _plot_tseries(ax,station,direction,disp_type,formats,time_range,ref_time=None,alpha=None):
   '''
   used in the view method of StationDB
   '''
@@ -433,11 +433,42 @@ def _plot_tseries(ax,station,direction,disp_type,formats,time_range,ref_time=Non
   ax.cla()
   min_disp = np.inf
   max_disp = -np.inf
+  
+  station['magnitude'] = {}
+  station['magnitudestd'] = {}
+  for d in disp_type:
+    if not station['north'].has_key(d):
+      continue
+    if not station['east'].has_key(d):
+      continue
+    if not station['vert'].has_key(d):
+      continue
+    station['magnitude'][d] = np.sqrt(station['north'][d]**2 +
+                                      station['east'][d]**2 + 
+                                      station['vert'][d]**2)
+    n = station['north'][d]
+    e = station['east'][d]
+    v = station['vert'][d]
+    m = station['magnitude'][d]
+    nstd = station['northstd'][d]
+    estd = station['eaststd'][d]
+    vstd = station['vertstd'][d]
+    mstd = np.sqrt(((n/m)*nstd)**2 + ((e/m)*estd)**2 + ((v/m)*vstd)**2)
+    station['magnitudestd'][d] = mstd
+    if station['north'].has_key(d+'_mask'):
+      station['magnitude'][d+'_mask'] = station['north'][d+'_mask']
+      station['magnitudestd'][d+'_mask'] = station['north'][d+'_mask']
+
   for idx,d in enumerate(disp_type):
     if not station[direction].has_key(d):
       continue
     if (idx == 0) & (direction == 'north'):
       ax.set_title('Station %s' % station['ID'],fontsize=16)
+
+    if station[direction].has_key(d+'_mask'):
+      mask = ~station[direction][d+'_mask']
+    else:
+      mask = np.zeros(len(station[direction][d]),dtype=bool)
 
     time = station['time']
     if ref_time is not None:
@@ -451,16 +482,19 @@ def _plot_tseries(ax,station,direction,disp_type,formats,time_range,ref_time=Non
     if any(disp[(time>=time_range[0]) & (time<=time_range[1])] > max_disp):
       max_disp = max(disp[(time>=time_range[0]) & (time<=time_range[1])])
     std = station['%sstd' % direction][d]
-    if (d == 'raw') |(d == 'detrended'):
-      ax.errorbar(time,disp,std,fmt=formats[idx])
+    if ('raw' in d) |('detrended' in d):
+      disp = np.ma.masked_array(disp,mask=mask)
+      ax.errorbar(time,disp,std,fmt=formats[idx],alpha=alpha[idx])
     else:
-      ax.plot(time,disp,formats[idx],lw=2)
-
+      disp = np.ma.masked_array(disp,mask=mask)
+      ax.plot(time,disp,formats[idx],lw=2,alpha=alpha[idx])
+        
   ax.set_xticks(ticks)
   diff_time = abs(time_range[0] - time_range[1])
   ax.set_xlim([time_range[0]-diff_time*0.05,time_range[1]+diff_time*0.05])
   diff_disp = abs(min_disp - max_disp) 
-  ax.set_ylim([min_disp-diff_disp*.05,max_disp+diff_disp*.05]) 
+  #ax.set_ylim([min_disp-diff_disp*.05,max_disp+diff_disp*.05]) 
+  #ax.set_ylim([min_disp,max_disp]) 
   ax.ticklabel_format(useOffset=False)
   ax.minorticks_on()
   ax.set_ylabel('%s disp. (mm)' % direction,fontsize=16)
@@ -517,7 +551,6 @@ class StationDB(dict):
       repository: Name of directory where data is downloaded (created and 
                   populated with the update_data function
     '''  
-      
     dataframe = pandas.io.parsers.read_csv(
                   '%s/%s/metadata.txt' % (UNAVCOPATH,repository),
                   names=['ID','description','lat','lon'])
@@ -719,7 +752,8 @@ class StationDB(dict):
         sta['vert'][name]  = np.zeros(time_no)
         sta['vertstd'][name]  = np.zeros(time_no)
 
-      tidx, = np.nonzero(time == sta['time'])
+      tol = 1e-6
+      tidx, = np.nonzero(abs(time - sta['time']) < tol)
       tidx = tidx[0]     
       if direction == 'n':
         sta['north'][name][tidx] = p
@@ -807,7 +841,8 @@ class StationDB(dict):
            disp_types=['raw','secular'],
            ts_formats=None,
            quiver_colors=None,
-           ref_time=None,
+           ref_time=None, 
+           alpha=None, 
            time_range=[2000.0,TODAY],
            scale_length=100,
            quiver_scale=0.001,
@@ -843,12 +878,14 @@ class StationDB(dict):
                     smaller number -> bigger arrow
       artists: additional artists to add to the map view plot
     '''
+    if alpha is None:
+      alpha = [0.4,1.0,0.4,1.0,0.4,1.0,0.4,1.0]
     if ts_formats is None:
-      ts_formats_all = ['g','k','r','m','y','b']
+      ts_formats_all = ['b','b','g','g','r','r','m','m']
       ts_formats = ts_formats_all[:len(disp_types)]
 
     if quiver_colors is None:
-      quiver_colors_all = ['g','k','r','m','y','b']
+      quiver_colors_all = ['b','b','r','m','y','b','r','r']
       quiver_colors = quiver_colors_all[:len(disp_types)]
 
     assert len(ts_formats) == len(quiver_colors)
@@ -857,14 +894,15 @@ class StationDB(dict):
     time = time_range[0]
 
     main_fig = plt.figure('Map View',figsize=(10,11.78))
-    sub_fig = plt.figure('Time Series',figsize=(9.0,6.6))
+    sub_fig = plt.figure('Time Series',figsize=(9.0,8.8))
 
     main_ax = main_fig.add_axes([0.08,0.08,0.76,0.76])
     slider_ax = main_fig.add_axes([0.08,0.88,0.76,0.04])
     color_ax = main_fig.add_axes([0.88,0.08,0.04,0.76])
-    sub_ax1 = sub_fig.add_subplot(311)
-    sub_ax2 = sub_fig.add_subplot(312)
-    sub_ax3 = sub_fig.add_subplot(313)
+    sub_ax1 = sub_fig.add_subplot(411)
+    sub_ax2 = sub_fig.add_subplot(412)
+    sub_ax3 = sub_fig.add_subplot(413)
+    sub_ax4 = sub_fig.add_subplot(414)
 
     time_slider = Slider(slider_ax,'time',time_range[0],time_range[1],valinit=time_range[0])
 
@@ -877,7 +915,7 @@ class StationDB(dict):
     # if the displacement type has a ts_format with an 'o' or '.' then sigma=1, otherwise sigma=0
     sigma_list = []
     for idx,i in enumerate(disp_types):
-      if (i == 'raw') | (i =='detrended'):
+      if ('raw' in i) | ('detrended' in i):
         sigma_list += [1.0]
         ts_formats[idx] += '.'
       else:
@@ -907,13 +945,14 @@ class StationDB(dict):
 
     def _onpick(event):
       #make time series
-      artist_idx, = np.nonzero(event.artist.get_label() == station_point_label_lst)
+      artist_idx, = np.nonzero(str(event.artist.get_label()) == station_point_label_lst)
       station_label = station_label_lst[artist_idx[0]]
       station = self[station_label]
 
-      _plot_tseries(sub_ax1,station,'north',disp_types,ts_formats,time_range,ref_time=ref_time)
-      _plot_tseries(sub_ax2,station,'east',disp_types,ts_formats,time_range,ref_time=ref_time)
-      _plot_tseries(sub_ax3,station,'vert',disp_types,ts_formats,time_range,ref_time=ref_time)
+      _plot_tseries(sub_ax1,station,'north',disp_types,ts_formats,time_range,ref_time=ref_time,alpha=alpha)
+      _plot_tseries(sub_ax2,station,'east',disp_types,ts_formats,time_range,ref_time=ref_time,alpha=alpha)
+      _plot_tseries(sub_ax3,station,'vert',disp_types,ts_formats,time_range,ref_time=ref_time,alpha=alpha)
+      _plot_tseries(sub_ax4,station,'magnitude',disp_types,ts_formats,time_range,ref_time=ref_time,alpha=alpha)
 
       #adjust main figure
       sub_fig.canvas.draw()
