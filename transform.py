@@ -2,7 +2,6 @@
 from __future__ import division
 import numpy as np
 import matplotlib.pyplot as plt
-from tplot.axes3d import Axes3D
 
 def _augment(point):
   point = np.array(point,dtype=float,copy=True)
@@ -65,9 +64,9 @@ def point_rotation_x(arg):
 
 
 def point_rotation_y(arg):
-  M = np.array([[np.cos(arg), 0.0, np.sin(arg), 0.0],
+  M = np.array([[np.cos(arg), 0.0, -np.sin(arg), 0.0],
                 [0.0, 1.0, 0.0, 0.0],
-                [-np.sin(arg), 0.0, np.cos(arg), 0.0],
+                [np.sin(arg), 0.0, np.cos(arg), 0.0],
                 [0.0, 0.0, 0.0, 1.0]])
   return Transform(M)
 
